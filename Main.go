@@ -1,34 +1,40 @@
 package main
 
 import (
-	Con "LT-Code/ConActInterface"
-	"LT-Code/Timer"
 	"github.com/bits-and-blooms/bloom"
+	Con "github.com/xm0onh/LT-Code/ConActInterface"
+	kzg "github.com/xm0onh/LT-Code/KZG"
+	"github.com/xm0onh/LT-Code/Timer"
 
-	Crypt "LT-Code/Cryptography"
-	"LT-Code/Decoding"
-	"LT-Code/Encoding"
-	"LT-Code/Net"
 	"encoding/gob"
 	"fmt"
 	"os"
 	"strconv"
 	"time"
+
+	Crypt "github.com/xm0onh/LT-Code/Cryptography"
+	"github.com/xm0onh/LT-Code/Decoding"
+	"github.com/xm0onh/LT-Code/Encoding"
+	"github.com/xm0onh/LT-Code/Net"
 )
 
 func main() {
-	
+
 	/////////////////Network Implementation///////////
 	gob.Register(Encoding.Droplet{})
 	gob.Register(Encoding.Request{})
 	gob.Register(Timer.TimerStruct{})
+	gob.Register(kzg.KZGStatus{})
+	gob.Register(kzg.KZGRequest{})
+	gob.Register(kzg.KZGVerify{})
+	gob.Register(Net.SerializableKZGVerify{})
 	gob.Register(bloom.BloomFilter{})
 
 	////////Key setup and Loading//////////
-	regions := []string{"us-east-1", "eu-central-1", "sa-east-1"}
+	regions := []string{"us-east-2", "eu-central-1"}
 	fmt.Println("Getting Node IDs")
 	NodeIds := Net.GetIDs(regions)
-	//	Crypt.KeySetup(len(NodeIds))
+	// Crypt.KeySetup(len(NodeIds))
 	fmt.Println("Node Ids for all regions are", NodeIds)
 	//	fmt.Println("Getting my ID")
 	MyID := Net.GetmyID()
@@ -36,8 +42,8 @@ func main() {
 	//fmt.Println("Getting my Idx")
 	MyIndx := Decoding.GetIndex(MyID, NodeIds)
 	fmt.Println("Getting keys")
-	//Crypt.KeySetup(len(NodeIds))
-	//Crypt.Load_CommitNum(CommitLen)
+	// Crypt.KeySetup(len(NodeIds))
+	// Crypt.Load_CommitNum(CommitLen)
 	privKey, _ := Crypt.Load_Own_keys("Priv"+strconv.Itoa(MyIndx), "Pub"+strconv.Itoa(MyIndx))
 	pubkeys := Crypt.Load_PubKeys(len(NodeIds))
 	fmt.Println("Private Key is", privKey)
@@ -47,18 +53,15 @@ func main() {
 	conAct.PrivateKey = privKey
 	/////////Loading IDs/////////
 	conAct.MyID = MyID
-	//conAct.Peers= Net.Ec2IpExtractor("Role1", "Root-nodes")
-	//	conAct.RequestorIDs = Net.Ec2IpExtractor("us-east-1", "Role3", "Requestors")
+	// conAct.Peers = Net.Ec2IpExtractor("Role1", "Root-nodes", "us-east-2")
+	conAct.RequestorIDs = Net.Ec2IpExtractor("us-east-1", "Role3", "Requestors")
 	requestorIps := Net.EC2IPsForAllRegions(regions, "Role3", "Requestors")
-	for _, requestor := range requestorIps {
-		conAct.RequestorIPs = append(conAct.RequestorIPs, requestor)
-	}
+	conAct.RequestorIPs = append(conAct.RequestorIPs, requestorIps...)
 
 	//conAct.Peers=append(conAct.Peers,conAct.Primary)
 	peers := Net.EC2IPsForAllRegions(regions, "Role1", "Root-nodes")
-	for _, peer := range peers {
-		conAct.Peers = append(conAct.Peers, peer)
-	}
+	conAct.Peers = append(conAct.Peers, peers...)
+
 	///////////////////////IDSANDIPSForRespondersANDRequestors////////
 	fmt.Println("Just before IDSANDIPSForRespondersANDRequestors!!!!!!!!!!!!!!!")
 	ResponderIDSAndIPS := Net.EC2IPsAndIDSForAllRegions(regions, "Role1", "Root-nodes")
@@ -91,8 +94,9 @@ func main() {
 	}
 
 	///////////// Network Init//////////////////////
-	//conAct.BlockProposalPort="18001"
-	//CommitteeSize := (len(conAct.IDs) / 3) + 3
+	// conAct.BlockProposalPort="18001"
+	// CommitteeSize := (len(conAct.IDs) / 3) + 3
+	fmt.Println("--->", os.Args)
 	numberofMacroBlocks, err := strconv.Atoi(os.Args[1])
 	if err != nil {
 		panic(err)
@@ -115,32 +119,41 @@ func main() {
 	if errip != nil {
 		fmt.Println(errip)
 	}
-	//var ConNetInf ConActAndNetInterface.NetworkToConActInterface
+	// var ConNetInf ConActAndNetInterface.NetworkToConActInterface
 	Net.InitListener(myIPAdd, conAct.MsgsPort, conAct, CommitteeSize)
 	for indx, value := range pubkeys {
 		fmt.Println("Index in pubkeySlice is", indx)
 		conAct.MapIDToPbKey[conAct.IDs[indx]] = value
-	}
-	
-	conAct.Decoder = Decoding.InitDecoder()
-	
-	////////////////////////////Decoder//////
 
+	}
+	fmt.Println("MapIDToPbKey is", conAct.MapIDToPbKey)
+	conAct.Decoder = Decoding.InitDecoder()
+
+	////////////////////////////Decoder//////
+	fmt.Println("Requestor IDs are", conAct.RequestorIDs)
+	var dropletSlice []Encoding.Droplet
 	if !Net.IfIamArequestor(conAct.RequestorIDs, MyID) {
 
 		macroblockSlice := Encoding.GenerateMacroBlocks(numberofMacroBlocks, numberOfMicroBlocks, NumberOfTransactionInEachMicroBlock)
 		for _, value := range *macroblockSlice {
-			dropletSlice := Encoding.GenerateDropletSlice(value, numberOfMicroBlocks, numberOfMicroBlocks/2, 0.1, conAct.PrivateKey, conAct.MyID)
+			dropletSlice = Encoding.GenerateDropletSlice(value, numberOfMicroBlocks, numberOfMicroBlocks/2, 0.1, conAct.PrivateKey, conAct.MyID)
 			fmt.Println("Len Droplet Slice is", len(dropletSlice))
-			dropletSlice=Encoding.GenerateBloomFilter(dropletSlice, CommitteeSize)
-
+			// fmt.Println("Droplet hash", dropletSlice[0].DropletHash)
+			// dropletSlice = Encoding.GenerateBloomFilter(dropletSlice, CommitteeSize)
+			fmt.Println("The value of Block ID is", value.BlockID)
 			conAct.Decoder.MacroBlockIDToDropletSliceMap[value.BlockID] = dropletSlice
 
 		}
-	
+		fmt.Println("Done with Decoding!")
+
+		fmt.Println("Start the KZG Trusted Setup")
+		conAct.KZGSetup = *kzg.InitKZG(dropletSlice)
+		// fmt.Println("KZG Commitment is", comm)
+		// fmt.Println("KZG z is", z)
+		// fmt.Println("KZG y is", y)
 
 	}
-	
+	/////////////////////KZG Commitment//////////
 
 	/////////////////////Encoder//////////
 	fmt.Println("Requestor IDs are", conAct.RequestorIDs)
@@ -152,35 +165,27 @@ func main() {
 	if Net.IfIamArequestor(conAct.RequestorIDs, conAct.MyID) {
 
 		fmt.Println(" I am a requestor!")
-		request := Encoding.CreateReq(1, 2, conAct.MyID, conAct.PrivateKey)
-
+		kzgReq := kzg.CreateKZGRequest()
+		request := Encoding.CreateReq(1, 8, conAct.MyID, conAct.PrivateKey)
 		fmt.Println("Request Sig is", request.Sig)
 		fmt.Println("Request Hash is", request.RHash)
-		//fmt.Println("NodeIdToDialConnMap is ", conAct.NodeIdToDialConnMapResponders)
 		fmt.Println("conAct.ID is", conAct.IDs)
-		//	time.Sleep(20 * time.Second)
 
 		for ID, IP := range conAct.IDToIPMPResponders {
-			//	if !Net.IfIamArequestor(conAct.RequestorIDs, myIPAdd) {
-			///A better option may be to have NodeIdToPeerIPMap instead of extracting IP from Conn.
-			//	PeerIP, bolErr := Net.GetIPaddFromConn(conAct.NodeIdToDialConnMap[value])
-			//	if !bolErr {
-			//		log.Fatal("error while extracting IP from conn.")
-			//	}
-			//	for k,v :=range conAct.IDToIPMPResponders{
 			conAct.NodeIdToDialConnMapResponders[ID] = Net.DialNode(IP, conAct.MsgsPort)
 			fmt.Println("conAct.NodeIdToDialConnMap[value] is", conAct.NodeIdToDialConnMapResponders[ID])
-
-			//		}
 			fmt.Println("Sending request msg!!!!!!")
-			//	}
+
 		}
 		conAct.AddEncodertoNodeIDMap(conAct.NodeIdToDialConnMapResponders)
 
 		for ID, IP := range conAct.IDToIPMPResponders {
-
+			go Net.KZGZSender(conAct.NodeIdToDialConnMapResponders[ID], kzgReq, IP, ID, conAct.MsgsPort, &conAct.NodeIdToDialConnMapResponders, &conAct.NodeIDToEncoderMap)
+			fmt.Println(<-conAct.KZGVerficationStatus)
+			fmt.Println("Test after Verification")
 			Net.MsgSender(conAct.NodeIdToDialConnMapResponders[ID], request, IP, ID, conAct.MsgsPort, &conAct.NodeIdToDialConnMapResponders, &conAct.NodeIDToEncoderMap)
 		}
+		fmt.Println("the request is ", request)
 	}
 
 	idle()
@@ -193,4 +198,3 @@ func idle() {
 	}
 
 }
-

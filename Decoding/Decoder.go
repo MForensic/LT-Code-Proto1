@@ -1,21 +1,23 @@
 package Decoding
 
 import (
-	"LT-Code/Encoding"
-	N "LT-Code/Net"
-	"LT-Code/Timer"
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
-//	"github.com/hashicorp/vault/helper/xor"
-		"github.com/hashicorp/vault/sdk/helper/xor"
+
+	"github.com/xm0onh/LT-Code/Encoding"
+	N "github.com/xm0onh/LT-Code/Net"
+	"github.com/xm0onh/LT-Code/Timer"
+
+	//	"github.com/hashicorp/vault/helper/xor"
+	"github.com/hashicorp/vault/sdk/helper/xor"
 
 	"net"
 	"time"
 )
 
-func (decoder Decoder) AddDropletToSlice(committeeSize int, droplet Encoding.Droplet, startTime time.Time, NodeIdToDialConnMapRequestors *map[string]net.Conn, NodesSlice []string, MsgsPort string, IdToEncoderMap *map[string]*gob.Encoder) {
+func (decoder *Decoder) AddDropletToSlice(committeeSize int, droplet Encoding.Droplet, startTime time.Time, NodeIdToDialConnMapRequestors *map[string]net.Conn, NodesSlice []string, MsgsPort string, IdToEncoderMap *map[string]*gob.Encoder) {
 	//decoder.LockMacroBlockIDToDropletSliceMap.Lock()
 	if _, ok := decoder.MacroBlockIDToDropletSliceMap[droplet.BlockId]; !ok {
 		dropletSlice := make([]Encoding.Droplet, 0, committeeSize)
@@ -26,7 +28,8 @@ func (decoder Decoder) AddDropletToSlice(committeeSize int, droplet Encoding.Dro
 		decoder.MacroBlockIDToDropletSliceMap[droplet.BlockId] = append(decoder.MacroBlockIDToDropletSliceMap[droplet.BlockId], droplet)
 	}
 	//	decoder.LockMacroBlockIDToDropletSliceMap.Unlock()
-	fmt.Println("Block to droplete ID slice length is", decoder.MacroBlockIDToDropletSliceMap[droplet.BlockId])
+
+	fmt.Println("Block to droplete ID slice length is", len(decoder.MacroBlockIDToDropletSliceMap[droplet.BlockId]), "Block ID is", droplet.BlockId, "Committee Size is", committeeSize)
 	//if len(decoder.MacroBlockIDToDropletSliceMap[droplet.BlockId]) >= 2*committeeSize {
 	if len(decoder.MacroBlockIDToDropletSliceMap[droplet.BlockId]) >= committeeSize {
 
@@ -35,7 +38,7 @@ func (decoder Decoder) AddDropletToSlice(committeeSize int, droplet Encoding.Dro
 			decoder.Peel(droplet.BlockId)
 			if len(decoder.Blockchain.MapMacroBlockNumToMapMiroBlockHashToMicroBlock[droplet.BlockId]) == committeeSize/2 {
 				fmt.Println("Number of decoded Microblocks are", len(decoder.Blockchain.MapMacroBlockNumToMapMiroBlockHashToMicroBlock[droplet.BlockId]))
-				fmt.Println("Decoded Microblcks are", decoder.Blockchain.MapMacroBlockNumToMapMiroBlockHashToMicroBlock[droplet.BlockId])
+				// fmt.Println("Decoded Microblcks are", decoder.Blockchain.MapMacroBlockNumToMapMiroBlockHashToMicroBlock[droplet.BlockId])
 				totalTimeTaken := time.Since(startTime)
 				RequesterTimeStruct := Timer.TimerStruct{}
 				RequesterTimeStruct.Duration = totalTimeTaken.Nanoseconds()
@@ -57,7 +60,7 @@ func (decoder *Decoder) GetDroplet(MacroBlockID, idx int) *Encoding.Droplet {
 
 }
 
-func (decoder Decoder) GetSingleton(MacroBlockId int) (int, int, bool) {
+func (decoder *Decoder) GetSingleton(MacroBlockId int) (int, int, bool) {
 	//counter :=0
 	EdgeToBlockinSeq := 0
 	//val:=false
@@ -101,13 +104,14 @@ func (decoder Decoder) GetSingleton(MacroBlockId int) (int, int, bool) {
 	return 0, 0, false
 }
 
-//func  removeEdge(idx int, droplet Encoding.Droplet){
-//	droplet.SeqMicroBlockSlice[idx]=false
-//}
-///In peel first we get a singleton and add its MicroBlock to the mainChain. Then we find all droplets that has edges to
-///to the respective MicroBlock of singleton. We simply perform xor between those Microblocks and the singleton and remove
-///those edges from droplets.
-func (decoder Decoder) Peel(blockId int) bool {
+//	func  removeEdge(idx int, droplet Encoding.Droplet){
+//		droplet.SeqMicroBlockSlice[idx]=false
+//	}
+//
+// /In peel first we get a singleton and add its MicroBlock to the mainChain. Then we find all droplets that has edges to
+// /to the respective MicroBlock of singleton. We simply perform xor between those Microblocks and the singleton and remove
+// /those edges from droplets.
+func (decoder *Decoder) Peel(blockId int) bool {
 	_, _, success := decoder.GetSingleton(blockId)
 	//fmt.Println("idx,seqIdx,bol", SingleTonIndexinDropletSliceMap,idxBlockWithinSingleton,success)
 
@@ -134,7 +138,7 @@ func (decoder Decoder) Peel(blockId int) bool {
 
 }
 
-func (decoder Decoder) RemoveNeighborsFromSingleton(SingleTonIndexinDropletSliceMap, idxBlockWithinSingleton, blockId int) {
+func (decoder *Decoder) RemoveNeighborsFromSingleton(SingleTonIndexinDropletSliceMap, idxBlockWithinSingleton, blockId int) {
 	singleton := decoder.MacroBlockIDToDropletSliceMap[blockId][SingleTonIndexinDropletSliceMap]
 
 	decoder.MacroBlockIDToDropletSliceMap[blockId][SingleTonIndexinDropletSliceMap] = decoder.MacroBlockIDToDropletSliceMap[blockId][len(decoder.MacroBlockIDToDropletSliceMap[blockId])-1]
@@ -159,7 +163,7 @@ func (decoder Decoder) RemoveNeighborsFromSingleton(SingleTonIndexinDropletSlice
 //return true
 //}
 
-func (decoder Decoder) GetNumberofDecodedMicroBlockForMacroBlock(MacroBlockId int) int {
+func (decoder *Decoder) GetNumberofDecodedMicroBlockForMacroBlock(MacroBlockId int) int {
 	return decoder.DecodedMicroBlockcounter[MacroBlockId]
 }
 

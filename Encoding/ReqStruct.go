@@ -1,11 +1,12 @@
 package Encoding
 
 import (
-	Crypto "LT-Code/Cryptography"
 	"fmt"
-	"go.dedis.ch/kyber"
-	bn256 "go.dedis.ch/kyber/pairing/bn256"
-	"go.dedis.ch/kyber/sign/bls"
+
+	Crypto "github.com/xm0onh/LT-Code/Cryptography"
+	"go.dedis.ch/kyber/v3"
+	bn256 "go.dedis.ch/kyber/v3/pairing/bn256"
+	"go.dedis.ch/kyber/v3/sign/bls"
 )
 
 type Request struct {
@@ -15,19 +16,41 @@ type Request struct {
 	NodeId       string
 	RHash        []byte
 	Sig          []byte
+	KZG          bool
 }
 
+// type KZGRequest struct {
+// 	Verify bool
+// }
+
+// func SetStatus(status bool) *KZGRequest {
+// 	return &KZGRequest{
+// 		Verify: status,
+// 	}
+
+// }
+
+// func (k *KZGRequest) VerifyKZG() bool {
+// 	return k.Verify
+// }
+
+func (R *Request) VerifyKZG() bool {
+	return R.KZG
+}
 func (R Request) Verify(IdTOPbKeyMap map[string]kyber.Point) bool {
 	PubKey := IdTOPbKeyMap[R.NodeId]
+	fmt.Println("Sender Node ID during verification is:", R.NodeId)
 	fmt.Println("R.NodeId is", R.NodeId)
 	fmt.Println("Sender PubKey is", PubKey)
 	fmt.Println("R.Hash is  iHash", R.RHash)
 	fmt.Println("R.Sig is", R.Sig)
 
 	err := bls.Verify(bn256.NewSuite(), PubKey, R.RHash, R.Sig)
+	fmt.Println("Verification err ->", err)
 	if err == nil {
 		return true
 	}
+
 	return false
 }
 
